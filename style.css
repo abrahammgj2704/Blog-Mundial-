@@ -10,6 +10,10 @@
     --border: #1e293b;
     --max-width: 1000px;
     --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-sm: 8px;
+    --radius-full: 9999px;
 }
 
 /* Reseteo Global */
@@ -93,7 +97,7 @@ body {
     padding: 16px 20px 16px 52px;
     background-color: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     color: var(--text-color);
     font-size: 1.05rem;
     outline: none;
@@ -133,7 +137,7 @@ body {
     border: 1px solid var(--border);
     color: var(--text-muted);
     padding: 8px 18px;
-    border-radius: 20px;
+    border-radius: var(--radius-full);
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 600;
@@ -154,14 +158,14 @@ body {
 /* GRILLA DE ENTRADAS (CARDS GRID) */
 .posts-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
     gap: 24px;
 }
 
 .card {
     background-color: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     padding: 28px;
     cursor: pointer;
     display: flex;
@@ -181,6 +185,7 @@ body {
 
 .card-top {
     margin-bottom: 20px;
+    min-width: 0; /* Permite contención correcta de textos */
 }
 
 .card-meta {
@@ -218,6 +223,11 @@ body {
     color: var(--text-muted);
     font-size: 0.95rem;
     line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .card-tags {
@@ -231,7 +241,7 @@ body {
     color: var(--accent);
     font-size: 0.75rem;
     padding: 4px 10px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-weight: 600;
 }
 
@@ -253,7 +263,7 @@ body {
     border: 1px solid var(--border);
     color: var(--text-color);
     padding: 10px 20px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 0.9rem;
     font-weight: 600;
@@ -308,7 +318,7 @@ body {
     text-align: justify;
 }
 
-/* NAVEGACIÓN DE ENTRADAS ANTERIOR / SIGUIENTE (Fase 2) */
+/* NAVEGACIÓN DE ENTRADAS ANTERIOR / SIGUIENTE */
 .post-navigation {
     display: flex;
     justify-content: space-between;
@@ -323,7 +333,7 @@ body {
     border: 1px solid var(--border);
     color: var(--text-color);
     padding: 14px 24px;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-weight: 600;
     font-size: 0.95rem;
@@ -347,7 +357,7 @@ body {
     cursor: not-allowed;
 }
 
-/* SECCIÓN DE ARTÍCULOS RELACIONADOS (Fase 2) */
+/* SECCIÓN DE ARTÍCULOS RELACIONADOS */
 .related-section {
     margin-top: 60px;
     padding-top: 40px;
