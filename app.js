@@ -1,4 +1,4 @@
-// MOCK DATA (Array de objetos en memoria de JavaScript)
+// MOCK DATA
 const posts = [
     {
         id: 1,
@@ -54,7 +54,7 @@ const posts = [
         tags: ["Táctica", "Previas"],
         content: `En las últimas ligas internacionales se ha observado una notable tendencia hacia la solidez del bloque defensivo. Los entrenadores mundialistas coinciden en que la prioridad absoluta es no encajar goles tempranos en torneos de eliminación directa.
 
-        Veremos planteamientos tácticos extremadamente rígidos en la fase de grupos, donde obtener un empate puede ser el boleto de entrada a los octavos de final. Las defensas de HTML de cinco hombres con carrileros de alta proyección serán la norma.`
+        Veremos planteamientos tácticos extremadamente rígidos en la fase de grupos, donde obtener un empate puede ser el boleto de entrada a los octavos de final. Las defensas de cinco hombres con carrileros de alta proyección serán la norma.`
     },
     {
         id: 6,
@@ -68,10 +68,13 @@ const posts = [
     }
 ];
 
-// CONTROL DE ESTADO LOCAL
-let currentFilterTag = "";  
-let currentSearchQuery = ""; 
-let currentArticleId = null; 
+// CONTROL DE ESTADO LOCAL ENCAPSULADO (State Pattern)
+const state = {
+    currentFilterTag: "",  
+    currentSearchQuery: "", 
+    currentArticleId: null,
+    lastFocusedCard: null
+}; 
 
 // SELECTORES DEL DOM
 const postsGrid = document.getElementById("posts-grid");
@@ -100,70 +103,156 @@ function formatDate(dateString) {
     return new Date(dateString).toLocaleDateString('es-ES', options);
 }
 
+// FACTORY PATTERN: Constructor seguro de tarjetas para evitar redundancia y XSS
+function createPostCard(post, isRelatedView = false) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.setAttribute("role", "link");
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("data-id", post.id);
+
+    // Contenedor superior
+    const cardTop = document.createElement("div");
+    cardTop.className = "card-top";
+
+    // Meta datos
+    const cardMeta = document.createElement("div");
+    cardMeta.className = "card-meta";
+    
+    const dateSpan = document.createElement("span");
+    dateSpan.textContent = formatDate(post.date);
+    cardMeta.appendChild(dateSpan);
+
+    if (!isRelatedView) {
+        const dotSpan = document.createElement("span");
+        dotSpan.className = "card-meta-dot";
+        const timeSpan = document.createElement("span");
+        timeSpan.textContent = calculateReadingTime(post.content);
+        cardMeta.appendChild(dotSpan);
+        cardMeta.appendChild(timeSpan);
+    }
+    cardTop.appendChild(cardMeta);
+
+    // Título (Jerarquía semántica controlada)
+    const titleNode = document.createElement(isRelatedView ? "h4" : "h3");
+    titleNode.className = "card-title";
+    titleNode.textContent = post.title;
+    cardTop.appendChild(titleNode);
+
+    // Subtítulo / Extracto
+    if (!isRelatedView) {
+        const excerptNode = document.createElement("p");
+        excerptNode.className = "card-excerpt";
+        excerptNode.textContent = post.subtitle;
+        cardTop.appendChild(excerptNode);
+    }
+    card.appendChild(cardTop);
+
+    // Etiquetas / Tags
+    const tagsContainer = document.createElement("div");
+    tagsContainer.className = "card-tags";
+    post.tags.forEach(tag => {
+        const tagSpan = document.createElement("span");
+        tagSpan.className = "tag";
+        tagSpan.textContent = tag;
+        tagsContainer.appendChild(tagSpan);
+    });
+    card.appendChild(tagsContainer);
+
+    // Escuchadores de eventos para navegación accesible
+    const openCard = () => {
+        if (!isRelatedView) {
+            state.lastFocusedCard = card;
+        }
+        showDetail(post.id);
+    };
+
+    card.addEventListener("click", openCard);
+    card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openCard();
+        }
+    });
+
+    return card;
+}
+
 // RENDERIZADORES
 function renderChips() {
     const uniqueTags = new Set();
     posts.forEach(post => post.tags.forEach(tag => uniqueTags.add(tag)));
 
-    let chipsHtml = `<button class="chip ${currentFilterTag === "" ? "active" : ""}" data-tag="">Todos</button>`;
+    // Usar fragmento de DOM para repintar eficientemente
+    const fragment = document.createDocumentFragment();
+
+    // Crear botón "Todos"
+    const allBtn = document.createElement("button");
+    allBtn.className = `chip ${state.currentFilterTag === "" ? "active" : ""}`;
+    allBtn.textContent = "Todos";
+    allBtn.setAttribute("role", "tab");
+    allBtn.setAttribute("aria-selected", state.currentFilterTag === "" ? "true" : "false");
+    allBtn.addEventListener("click", () => handleTagFilter(""));
+    fragment.appendChild(allBtn);
+
+    // Crear botones de categorías
     uniqueTags.forEach(tag => {
-        chipsHtml += `<button class="chip ${currentFilterTag === tag ? "active" : ""}" data-tag="${tag}">${tag}</button>`;
+        const btn = document.createElement("button");
+        const isActive = state.currentFilterTag === tag;
+        btn.className = `chip ${isActive ? "active" : ""}`;
+        btn.textContent = tag;
+        btn.setAttribute("role", "tab");
+        btn.setAttribute("aria-selected", isActive ? "true" : "false");
+        btn.addEventListener("click", () => handleTagFilter(tag));
+        fragment.appendChild(btn);
     });
 
-    chipsContainer.innerHTML = chipsHtml;
+    chipsContainer.innerHTML = "";
+    chipsContainer.appendChild(fragment);
+}
 
-    const chips = chipsContainer.querySelectorAll(".chip");
-    chips.forEach(chip => {
-        chip.addEventListener("click", (e) => {
-            currentFilterTag = e.target.getAttribute("data-tag");
-            renderChips(); 
-            renderHome();  
-        });
-    });
+function handleTagFilter(tag) {
+    state.currentFilterTag = tag;
+    renderChips(); 
+    renderHome();
 }
 
 function renderHome() {
     postsGrid.innerHTML = "";
 
     const filteredPosts = posts.filter(post => {
-        const matchesTag = currentFilterTag === "" || post.tags.includes(currentFilterTag);
-        const matchesSearch = post.title.toLowerCase().includes(currentSearchQuery.toLowerCase()) ||
-                              post.tags.some(tag => tag.toLowerCase().includes(currentSearchQuery.toLowerCase()));
+        const matchesTag = state.currentFilterTag === "" || post.tags.includes(state.currentFilterTag);
+        const matchesSearch = post.title.toLowerCase().includes(state.currentSearchQuery.toLowerCase()) ||
+                              post.tags.some(tag => tag.toLowerCase().includes(state.currentSearchQuery.toLowerCase()));
         return matchesTag && matchesSearch;
     });
 
     if (filteredPosts.length === 0) {
-        postsGrid.innerHTML = `
-            <div style="grid-column: 1/-1; text-align: center; padding: 40px 0; color: var(--text-muted);">
-                <p style="font-size: 1.1rem;">No se encontraron artículos que coincidan con tu búsqueda.</p>
-            </div>`;
+        const emptyState = document.createElement("div");
+        emptyState.style.gridColumn = "1/-1";
+        emptyState.style.textAlign = "center";
+        emptyState.style.padding = "40px 0";
+        emptyState.style.color = "var(--text-muted)";
+        
+        const text = document.createElement("p");
+        text.style.fontSize = "1.1rem";
+        text.textContent = "No se encontraron artículos que coincidan con tu búsqueda.";
+        
+        emptyState.appendChild(text);
+        postsGrid.appendChild(emptyState);
         return;
     }
 
+    const fragment = document.createDocumentFragment();
     filteredPosts.forEach(post => {
-        const card = document.createElement("div");
-        card.className = "card";
-        card.innerHTML = `
-            <div class="card-top">
-                <div class="card-meta">
-                    <span>${formatDate(post.date)}</span>
-                    <span class="card-meta-dot"></span>
-                    <span>${calculateReadingTime(post.content)}</span>
-                </div>
-                <h2 class="card-title">${post.title}</h2>
-                <p class="card-excerpt">${post.subtitle}</p>
-            </div>
-            <div class="card-tags">
-                ${post.tags.map(t => `<span class="tag">${t}</span>`).join("")}
-            </div>
-        `;
-        card.addEventListener("click", () => showDetail(post.id));
-        postsGrid.appendChild(card);
+        const cardElement = createPostCard(post, false);
+        fragment.appendChild(cardElement);
     });
+    postsGrid.appendChild(fragment);
 }
 
 function showDetail(id) {
-    currentArticleId = id;
+    state.currentArticleId = id;
     const postIndex = posts.findIndex(p => p.id === id);
     const post = posts[postIndex];
 
@@ -173,31 +262,57 @@ function showDetail(id) {
     controlsSection.classList.add("hidden");
     detailView.classList.remove("hidden");
 
-    const bodyHtml = post.content
-        .split('\n\n')
-        .map(p => `<p>${p.trim()}</p>`)
-        .join('');
+    // Limpiar contenido previo de manera segura
+    articleContent.innerHTML = "";
 
-    articleContent.innerHTML = `
-        <header class="article-header">
-            <h2 class="article-title">${post.title}</h2>
-            <div class="article-meta-info">
-                Publicado el <strong>${formatDate(post.date)}</strong>
-                <span style="color: var(--border);">|</span>
-                <span>Estimación: <strong>${calculateReadingTime(post.content)}</strong></span>
-            </div>
-        </header>
-        <div class="article-body">${bodyHtml}</div>
-        <div class="card-tags" style="margin-top: 30px;">
-            ${post.tags.map(t => `<span class="tag">${t}</span>`).join("")}
-        </div>
-    `;
+    // Armar Cabecera semántica
+    const header = document.createElement("header");
+    header.className = "article-header";
 
+    const titleNode = document.createElement("h2");
+    titleNode.className = "article-title";
+    titleNode.textContent = post.title;
+    header.appendChild(titleNode);
+
+    const metaInfo = document.createElement("div");
+    metaInfo.className = "article-meta-info";
+    metaInfo.innerHTML = `Publicado el <strong>${formatDate(post.date)}</strong> <span style="color: var(--border);">|</span> Enfoque: <strong>${calculateReadingTime(post.content)}</strong>`;
+    header.appendChild(metaInfo);
+    articleContent.appendChild(header);
+
+    // Cuerpo protector anti-XSS usando fragmentación controlada de párrafos literales
+    const bodyContainer = document.createElement("div");
+    bodyContainer.className = "article-body";
+    post.content.split('\n\n').forEach(paragraphText => {
+        if (paragraphText.trim()) {
+            const p = document.createElement("p");
+            p.textContent = paragraphText.trim();
+            bodyContainer.appendChild(p);
+        }
+    });
+    articleContent.appendChild(bodyContainer);
+
+    // Zona inferior de etiquetas del post
+    const footerTags = document.createElement("div");
+    footerTags.className = "card-tags";
+    footerTags.style.marginTop = "30px";
+    post.tags.forEach(t => {
+        const s = document.createElement("span");
+        s.className = "tag";
+        s.textContent = t;
+        footerTags.appendChild(s);
+    });
+    articleContent.appendChild(footerTags);
+
+    // Estado navegadores secuenciales
     prevPostBtn.disabled = postIndex === 0;
     nextPostBtn.disabled = postIndex === posts.length - 1;
 
     renderRelatedPosts(post);
     window.scrollTo({ top: 0, behavior: "smooth" });
+    
+    // Enfocar el contenedor de detalle para iniciar lectura con teclado de forma fluida
+    backBtn.focus();
 }
 
 function renderRelatedPosts(currentPost) {
@@ -209,53 +324,52 @@ function renderRelatedPosts(currentPost) {
     }).slice(0, 3);
 
     if (related.length === 0) {
-        relatedPostsGrid.innerHTML = `
-            <p style="color: var(--text-muted); font-size: 0.95rem; font-style: italic; grid-column: 1/-1;">
-                No hay artículos relacionados disponibles para esta categoría.
-            </p>`;
+        const noRelated = document.createElement("p");
+        noRelated.style.color = "var(--text-muted)";
+        noRelated.style.fontSize = "0.95rem";
+        noRelated.style.fontStyle = "italic";
+        noRelated.style.gridColumn = "1/-1";
+        noRelated.textContent = "No hay artículos relacionados disponibles para esta categoría.";
+        relatedPostsGrid.appendChild(noRelated);
         return;
     }
 
+    const fragment = document.createDocumentFragment();
     related.forEach(post => {
-        const rCard = document.createElement("div");
-        rCard.className = "card";
-        rCard.innerHTML = `
-            <div class="card-top">
-                <div class="card-meta">${formatDate(post.date)}</div>
-                <h2 class="card-title" style="font-size: 1.15rem;">${post.title}</h2>
-            </div>
-            <div class="card-tags">
-                ${post.tags.map(t => `<span class="tag">${t}</span>`).join("")}
-            </div>
-        `;
-        rCard.addEventListener("click", () => showDetail(post.id));
-        relatedPostsGrid.appendChild(rCard);
+        const relatedCard = createPostCard(post, true);
+        fragment.appendChild(relatedCard);
     });
+    relatedPostsGrid.appendChild(fragment);
 }
 
 function showHome() {
     detailView.classList.add("hidden");
     homeView.classList.remove("hidden");
     controlsSection.classList.remove("hidden");
-    currentArticleId = null;
+    state.currentArticleId = null;
     renderHome();
+
+    // RESTAURACIÓN DE FOCO: Si venimos de presionar una tarjeta, le devolvemos la selección por teclado
+    if (state.lastFocusedCard) {
+        state.lastFocusedCard.focus();
+    }
 }
 
 // ESCUCHADORES DE EVENTOS
 searchInput.addEventListener("input", (e) => {
-    currentSearchQuery = e.target.value;
+    state.currentSearchQuery = e.target.value;
     renderHome();
 });
 
 backBtn.addEventListener("click", showHome);
 
 prevPostBtn.addEventListener("click", () => {
-    const currentIndex = posts.findIndex(p => p.id === currentArticleId);
+    const currentIndex = posts.findIndex(p => p.id === state.currentArticleId);
     if (currentIndex > 0) showDetail(posts[currentIndex - 1].id);
 });
 
 nextPostBtn.addEventListener("click", () => {
-    const currentIndex = posts.findIndex(p => p.id === currentArticleId);
+    const currentIndex = posts.findIndex(p => p.id === state.currentArticleId);
     if (currentIndex < posts.length - 1) showDetail(posts[currentIndex + 1].id);
 });
 
